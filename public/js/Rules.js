@@ -11,33 +11,31 @@ const isRulesActive = true;
 const BUTTONS = {
     main: {
         shareButton: true,
-        hideMeButton: true,
+        hideMeButton: false,
         startAudioButton: true,
         startVideoButton: true,
         startScreenButton: true,
         swapCameraButton: true,
         chatButton: true,
-        participantsButton: true,
+        participantsButton: false,
         whiteboardButton: true,
         settingsButton: true,
-        aboutButton: true, // Please keep me always visible, thank you!
+        aboutButton: false, // Please keep me always visible, thank you!
         exitButton: true,
     },
     settings: {
-        lockRoomButton: true,
-        unlockRoomButton: true,
+        // lockRoomButton: true,
+        // unlockRoomButton: true,
         lobbyButton: true,
         tabRecording: true,
     },
     producerVideo: {
-        videoPictureInPicture: true,
         fullScreenButton: true,
         snapShotButton: true,
         muteAudioButton: true,
         videoPrivacyButton: true,
     },
     consumerVideo: {
-        videoPictureInPicture: true,
         fullScreenButton: true,
         snapShotButton: true,
         sendMessageButton: true,

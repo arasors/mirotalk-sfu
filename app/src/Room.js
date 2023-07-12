@@ -7,7 +7,6 @@ const log = new Logger('Room');
 module.exports = class Room {
     constructor(room_id, worker, io) {
         this.id = room_id;
-        this.survey = config.survey;
         this.worker = worker;
         this.router = null;
         this.audioLevelObserver = null;
@@ -15,7 +14,7 @@ module.exports = class Room {
         this.audioLastUpdateTime = 0;
         this.io = io;
         this._isLocked = false;
-        this._isLobbyEnabled = false;
+        this._isLobbyEnabled = true;
         this._roomPassword = null;
         this.peers = new Map();
         this.createTheRouter();
@@ -115,7 +114,6 @@ module.exports = class Room {
     toJson() {
         return {
             id: this.id,
-            survey: this.survey,
             peers: JSON.stringify([...this.peers]),
         };
     }
@@ -208,8 +206,8 @@ module.exports = class Room {
                     {
                         producer_id: producer.id,
                         producer_socket_id: socket_id,
-                        peer_name: this.peers.get(socket_id)?.peer_name,
-                        peer_info: this.peers.get(socket_id)?.peer_info,
+                        peer_name: this.peers.get(socket_id).peer_name,
+                        peer_info: this.peers.get(socket_id).peer_info,
                         type: type,
                     },
                 ]);
@@ -243,7 +241,7 @@ module.exports = class Room {
             'producerclose',
             function () {
                 log.debug('Consumer closed due to producerclose event', {
-                    peer_name: this.peers.get(socket_id)?.peer_name,
+                    peer_name: this.peers.get(socket_id).peer_name,
                     consumer_id: consumer.id,
                 });
                 this.peers.get(socket_id).removeConsumer(consumer.id);
@@ -294,6 +292,19 @@ module.exports = class Room {
         }
     }
 
+    broadCast2(socket_id, action, data) {
+        log.debug('boradcast 2', {
+            data: data,
+            action: action,
+            socketId: socket_id
+        })
+        !!data.peers_id && this.send2(socket_id, action, data);
+        for (let otherID of Array.from(this.peers.keys()).filter((id) => id !== socket_id)) {
+            this.send2(otherID, action, data);
+        }
+    }
+
+
     sendTo(socket_id, action, data) {
         for (let peer_id of Array.from(this.peers.keys()).filter((id) => id === socket_id)) {
             this.send(peer_id, action, data);
@@ -302,5 +313,19 @@ module.exports = class Room {
 
     send(socket_id, action, data) {
         this.io.to(socket_id).emit(action, data);
+    }
+    
+    send2(socket_id, action, data) {
+        const peer_info = this.peers.get(socket_id)?.peer_info;
+        
+        log.debug('send2',{
+            socket_id: socket_id,
+            action: action,
+            data: data,
+            peer_info
+        })
+            if (peer_info?.is_waiting === false || action === "roomLobbyUpdate") {
+                this.io.to(socket_id).emit(action, data);
+            }
     }
 };

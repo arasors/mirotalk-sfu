@@ -2,30 +2,18 @@
 
 if (location.href.substr(0, 5) !== 'https') location.href = 'https' + location.href.substr(4, location.href.length - 4);
 
-/**
- * MiroTalk SFU - Room component
- *
- * @link    GitHub: https://github.com/miroslavpejic85/mirotalksfu
- * @link    Official Live demo: https://sfu.mirotalk.com
- * @license For open source use: AGPLv3
- * @license For commercial or closed source, contact us at license.mirotalk@gmail.com or purchase directly via CodeCanyon
- * @license CodeCanyon: https://codecanyon.net/item/mirotalk-sfu-webrtc-realtime-video-conferences/40769970
- * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.0.5
- *
- */
-
 // ####################################################
 // STATIC SETTINGS
 // ####################################################
 
-const RoomURL = window.location.href;
+const RoomURL = (window.location.href).replace(/[?&]name=[^&]+|&name=[^&]+/g, '').replace(/[?&]token=[^&]+|&token=[^&]+/g, '');
 
 const socket = io({ transports: ['websocket'] });
 
-let survey = {
-    enabled: true,
-    url: 'https://www.questionpro.com/t/AUs7VZq02P',
+const surveyActive = false;
+
+const url = {
+    survey: 'https://www.questionpro.com/t/AUs7VZq02P',
 };
 
 const _PEER = {
@@ -53,19 +41,13 @@ const wbHeight = 600;
 const swalImageUrl = '../images/pricing-illustration.svg';
 
 const lS = new LocalStorage();
-const localStorageSettings = lS.getObjectLocalStorage('MIROTALK_SFU_SETTINGS');
-const lsSettings = localStorageSettings
-    ? localStorageSettings
-    : {
-          theme: 'dark',
-          //...
-      };
 
 // ####################################################
 // DYNAMIC SETTINGS
 // ####################################################
 
-let swalBackground = 'radial-gradient(#393939, #000000)'; //'rgba(0, 0, 0, 0.7)';
+let currentTheme = 'dark';
+let swalBackground = 'radial-gradient(#202641, #181D35)'; //'rgba(0, 0, 0, 0.7)';
 
 let rc = null;
 let producer = null;
@@ -76,12 +58,19 @@ let chatMessagesId = 0;
 let room_id = getRoomId();
 let room_password = getRoomPassword();
 let peer_name = getPeerName();
+//custom change
+let peer_pass_organizer = false;
+//end
 let peer_uuid = getPeerUUID();
 let isScreenAllowed = getScreen();
 let notify = getNotify();
-isPresenter = isPeerPresenter();
+
+//custom change
+let token = getToken();
+//end
 
 let peer_info = null;
+let personal_color = Math.floor(Math.random() * 16777215).toString(16);
 
 let isHideMeActive = false;
 let isPitchBarEnabled = true;
@@ -92,6 +81,8 @@ let isEnumerateAudioDevices = false;
 let isEnumerateVideoDevices = false;
 let isAudioAllowed = false;
 let isVideoAllowed = false;
+let isDefaultVideoOn = false;
+let isDefaultAudioOn = true;
 let isVideoPrivacyActive = false;
 let isAudioVideoAllowed = false;
 let isParticipantsListOpen = false;
@@ -129,7 +120,6 @@ let initStream = null;
 // ####################################################
 
 function initClient() {
-    setTheme(lsSettings.theme);
     if (!DetectRTC.isMobileDevice) {
         setTippy('shareButton', 'Share room', 'right');
         setTippy('hideMeButton', 'Toggle hide me', 'right');
@@ -215,6 +205,25 @@ function setTippy(elem, content, placement, allowHTML = false) {
         allowHTML: allowHTML,
     });
 }
+
+//custom change
+
+// ####################################################
+// get Token Through Cookie
+// ####################################################
+function extractTokenAndRoomFromCookie() {
+    const cookies = document.cookie.split(';').reduce((cookies, cookie) => {
+        const [name, value] = cookie.split('=').map((c) => c.trim());
+        cookies[name] = decodeURIComponent(value);
+        return cookies;
+    }, {});
+
+    if (cookies.data) {
+        return JSON.parse(cookies.data);
+    }
+}
+
+//end
 
 // ####################################################
 // GET ROOM ID
@@ -413,31 +422,30 @@ function getNotify() {
     return true;
 }
 
-function isPeerPresenter() {
-    let qs = new URLSearchParams(window.location.search);
-    let presenter = filterXSS(qs.get('isPresenter'));
-    if (presenter) {
-        presenter = presenter.toLowerCase();
-        let queryPresenter = presenter === '1' || presenter === 'true';
-        if (queryPresenter != null) {
-            console.log('Direct join Reconnect', { isPresenter: queryPresenter });
-            return queryPresenter;
-        }
-    }
-    console.log('Direct join Reconnect', { presenter: true });
-    return true;
+    //custom change
+    function getPeerName() {
+        // const qs = new URLSearchParams(window.location.search);
+        // const name = filterXSS(qs.get('name'));
+        // if (isHtml(name)) {
+        //     console.log('Direct join', { name: 'Invalid name' });
+        //     return 'Invalid name';
+        // }
+        // console.log('Direct join', { name: name });
+        // return name;
+
+        const { name } = extractTokenAndRoomFromCookie();
+        return name;
+
 }
 
-function getPeerName() {
-    const qs = new URLSearchParams(window.location.search);
-    const name = filterXSS(qs.get('name'));
-    if (isHtml(name)) {
-        console.log('Direct join', { name: 'Invalid name' });
-        return 'Invalid name';
-    }
-    console.log('Direct join', { name: name });
-    return name;
+function getToken() {
+    // let qs = new URLSearchParams(window.location.search);
+    // return qs.get('token');
+    const { token } = extractTokenAndRoomFromCookie();
+    return token;
 }
+
+    //end
 
 function getPeerUUID() {
     if (lS.getItemLocalStorage('peer_uuid')) {
@@ -465,15 +473,19 @@ function getRoomPassword() {
 // SOME PEER INFO
 // ####################################################
 
+//custom change
 function getPeerInfo() {
     peer_info = {
         join_data_time: getDataTimeString(),
         peer_uuid: peer_uuid,
         peer_id: socket.id,
+        token: token,
+        personal_color: personal_color,
         peer_name: peer_name,
+        is_waiting: true,
         peer_presenter: isPresenter,
         peer_audio: isAudioAllowed,
-        peer_video: isVideoAllowed,
+        peer_video: isDefaultVideoOn ? isVideoAllowed : isDefaultVideoOn,
         peer_screen: isScreenAllowed,
         peer_video_privacy: isVideoPrivacyActive,
         peer_hand: false,
@@ -489,9 +501,13 @@ function getPeerInfo() {
     };
 }
 
+//end
+
 // ####################################################
 // ENTER YOUR NAME | Enable/Disable AUDIO/VIDEO
 // ####################################################
+
+//custom change 
 
 function whoAreYou() {
     console.log('04 ----> Who are you');
@@ -500,7 +516,11 @@ function whoAreYou() {
     hide(loadingDiv);
     document.body.style.background = 'var(--body-bg)';
 
+    let qs = new URLSearchParams(window.location.search);
+    let isOrganizer = !!(qs.get('organizer'));
+
     if (peer_name) {
+        isVideoAllowed = false;
         checkMedia();
         getPeerInfo();
         joinRoom(peer_name, room_id);
@@ -515,43 +535,153 @@ function whoAreYou() {
     const initUser = document.getElementById('initUser');
     initUser.classList.toggle('hidden');
 
+
+    const inputFields = [
+        {
+            id: 'swal-input1',
+            placeholder: 'Username',
+            type: 'text',
+            value: default_name,
+            validation: {
+            required: true,
+            errorMessage: 'Please enter your username'
+            }
+        }
+        ];
+
+        if (isOrganizer) {
+        inputFields.push({
+            id: 'swal-input2',
+            placeholder: 'Password',
+            type: 'password',
+            validation: {
+            required: true,
+            errorMessage: 'Please enter your password'
+            }
+        });
+        }
+
+        const html =`
+    ${inputFields.map(field =>
+        `<input id="${field.id}" class="swal2-input" type="${field.type}" value="${field.value ? field.value : ''}" placeholder="${field.placeholder}" style="width: 100% !important; margin-inline: 0 !important;" required>`
+    ).join('')}`;
+
+    const customCss = `
+    .swal2-input {
+        margin-inline: 0 !important;
+        width: 100% !important;
+    }
+    `;
+
+    const wrapper = document.createElement('div');
+        wrapper.appendChild(initUser);
+        wrapper.insertAdjacentHTML('beforeend', html);
+
     Swal.fire({
         allowOutsideClick: false,
         allowEscapeKey: false,
         background: swalBackground,
-        title: 'MiroTalk SFU',
-        input: 'text',
-        inputPlaceholder: 'Enter your name',
-        inputValue: default_name,
-        html: initUser, // Inject HTML
+        title: 'Join Meetblue',
+        // input: 'text',
+        // inputPlaceholder: 'Enter your name',
+        // inputValue: default_name,
+        html: wrapper, // Inject HTML
         confirmButtonText: `Join meeting`,
+        preConfirm: () => {
+              
+            let username = document.getElementById('swal-input1').value;
+            let password = isOrganizer ? document.getElementById('swal-input2').value : '';
+
+            if(username.trim() === ''){
+                return Swal.showValidationMessage('Please enter your name');
+            }
+
+            username = filterXSS(username);
+            if (isHtml(username)) return 'Invalid username!';
+            
+            if (!getCookie(room_id + '_name')) {
+                window.localStorage.peer_name = username;
+            }
+            setCookie(room_id + '_name', username, 30);
+            peer_name = username;
+
+            if(isOrganizer && password.trim() === ''){
+                return Swal.showValidationMessage('Please Enter Your password')
+            }
+            
+            password = filterXSS(password);
+            if (isHtml(password)) return 'Invalid password!';
+
+            return (isOrganizer && password.trim() !== '') ? checkOrganizerByPassword(room_id, password)
+            .then(data => {
+                if(data.allow){
+                    peer_pass_organizer = true;
+                    return {peer_name}
+                }
+                else return Swal.showValidationMessage(`Password Doesn't Match`);
+            })
+            .catch(error => {
+                return Swal.showValidationMessage(`${error}`);
+            }) : { peer_name }
+        },
         showClass: {
             popup: 'animate__animated animate__fadeInDown',
         },
         hideClass: {
             popup: 'animate__animated animate__fadeOutUp',
         },
-        inputValidator: (name) => {
-            if (!name) return 'Please enter your name';
-            name = filterXSS(name);
-            if (isHtml(name)) return 'Invalid name!';
-            if (!getCookie(room_id + '_name')) {
-                window.localStorage.peer_name = name;
-            }
-            setCookie(room_id + '_name', name, 30);
-            peer_name = name;
+        customClass: {
+            container: 'swal2-container-custom',
+            confirmButton: 'swal2-confirm-button-custom',
+            cancelButton: 'swal2-cancel-button-custom',
         },
-    }).then(() => {
+        onOpen: () => {
+            const style = document.createElement('style');
+            style.innerHTML = customCss;
+            document.head.appendChild(style);
+        },
+    }).then((result) => {
         if (initStream && !joinRoomWithScreen) {
             stopTracks(initStream);
             hide(initVideo);
         }
-        getPeerInfo();
-        joinRoom(peer_name, room_id);
+        
+        if (result.isConfirmed) {
+            const { username, peer_pass_organizer } = result.value;
+            getPeerInfo();
+            joinRoom(peer_name, room_id);
+            console.log(`Username: ${username}, Password: ${peer_pass_organizer}`);
+        }
     });
 }
 
+
+function checkOrganizerByPassword(room_id, password) {
+    return fetch('/organizer', {
+      method: 'POST',
+      body: JSON.stringify({ room: room_id, password }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(response => {
+      if (response.ok && response.status === 200) {
+        return response.json();
+      } else if(response.status === 401) {
+        throw new Error('Password is invalid');
+      } else {
+        throw new Error('Something wen"t wrong');
+      }
+    })
+    .catch(error => {
+      throw new Error('Network error: ' + error.message);
+    });
+  }
+
+//end
+
 function handleAudio(e) {
+    isDefaultAudioOn = isDefaultAudioOn ? false : true;
     isAudioAllowed = isAudioAllowed ? false : true;
     e.target.className = 'fas fa-microphone' + (isAudioAllowed ? '' : '-slash');
     setColor(e.target, isAudioAllowed ? 'white' : 'red');
@@ -560,7 +690,8 @@ function handleAudio(e) {
 }
 
 function handleVideo(e) {
-    isVideoAllowed = isVideoAllowed ? false : true;
+    isVideoAllowed = !isDefaultVideoOn ? true : !isVideoAllowed;
+    isDefaultVideoOn = true;
     e.target.className = 'fas fa-video' + (isVideoAllowed ? '' : '-slash');
     setColor(e.target, isVideoAllowed ? 'white' : 'red');
     setColor(startVideoButton, isVideoAllowed ? 'white' : 'red');
@@ -648,19 +779,16 @@ async function shareRoom(useNavigator = false) {
         Swal.fire({
             background: swalBackground,
             position: 'center',
-            title: 'Share the room',
+            title: '<strong>Welcome ' + peer_name + '</strong>',
             html: `
             <div id="qrRoomContainer">
                 <canvas id="qrRoom"></canvas>
             </div>
             <br/>
-            <p style="background:transparent; color:rgb(8, 189, 89);">Join from your mobile device</p>
-            <p style="background:transparent; color:white; font-family: Arial, Helvetica, sans-serif;">No need for apps, simply capture the QR code with your mobile camera Or Invite someone else to join by sending them the following URL</p>
+            <p style="background:transparent; color:white;">Share the link or QR code to invite others</p>
             <p style="background:transparent; color:rgb(8, 189, 89);">${RoomURL}</p>`,
-            showDenyButton: true,
+            showDenyButton: false,
             showCancelButton: true,
-            cancelButtonColor: 'red',
-            denyButtonColor: 'green',
             confirmButtonText: `Copy URL`,
             denyButtonText: `Email invite`,
             cancelButtonText: `Close`,
@@ -676,7 +804,7 @@ async function shareRoom(useNavigator = false) {
             } else if (result.isDenied) {
                 let message = {
                     email: '',
-                    subject: 'Please join our MiroTalkSfu Video Chat Meeting',
+                    subject: 'Please join our Meetblue Video Chat Meeting',
                     body: 'Click to join: ' + RoomURL,
                 };
                 shareRoomByEmail(message);
@@ -740,10 +868,12 @@ function joinRoom(peer_name, room_id) {
             socket,
             room_id,
             peer_name,
+            peer_pass_organizer,
             peer_uuid,
             peer_info,
+            isDefaultAudioOn,
             isAudioAllowed,
-            isVideoAllowed,
+            isVideoAllowed = isDefaultVideoOn ? isVideoAllowed : isDefaultVideoOn,
             isScreenAllowed,
             joinRoomWithScreen,
             roomIsReady,
@@ -754,6 +884,7 @@ function joinRoom(peer_name, room_id) {
 }
 
 function roomIsReady() {
+    setTheme('dark');
     BUTTONS.main.exitButton && show(exitButton);
     BUTTONS.main.shareButton && show(shareButton);
     BUTTONS.main.hideMeButton && show(hideMeButton);
@@ -850,7 +981,7 @@ function startSessionTimer() {
     setInterval(function printTime() {
         let callElapsedTime = Date.now() - callStartTime;
         sessionTime.innerText = getTimeToString(callElapsedTime);
-    }, 1000);
+    }, 1000)
 }
 
 function getTimeToString(time) {
@@ -1011,23 +1142,27 @@ function handleButtons() {
         rc.closeThenProduce(RoomClient.mediaType.video, null, true);
     };
     raiseHandButton.onclick = () => {
-        rc.updatePeerInfo(peer_name, socket.id, 'hand', true);
+        rc.updatePeerInfo(peer_name, rc.peer_id, 'hand', true);
     };
     lowerHandButton.onclick = () => {
-        rc.updatePeerInfo(peer_name, socket.id, 'hand', false);
+        rc.updatePeerInfo(peer_name, rc.peer_id, 'hand', false);
     };
     startAudioButton.onclick = () => {
-        setAudioButtonsDisabled(true);
+        // hide(startAudioButton);
+        // show(stopAudioButton);
+        // setAudioButtonsDisabled(true);
         if (!isEnumerateAudioDevices) initEnumerateAudioDevices();
-        rc.produce(RoomClient.mediaType.audio, microphoneSelect.value);
-        rc.updatePeerInfo(peer_name, socket.id, 'audio', true);
-        // rc.resumeProducer(RoomClient.mediaType.audio);
+        // rc.produce(RoomClient.mediaType.audio, microphoneSelect.value);
+        rc.updatePeerInfo(peer_name, rc.peer_id, 'audio', true);
+        rc.resumeProducer(RoomClient.mediaType.audio);
     };
     stopAudioButton.onclick = () => {
-        setAudioButtonsDisabled(true);
-        rc.closeProducer(RoomClient.mediaType.audio);
-        rc.updatePeerInfo(peer_name, socket.id, 'audio', false);
-        // rc.pauseProducer(RoomClient.mediaType.audio);
+        // hide(stopAudioButton)
+        // show(startAudioButton);
+        // setAudioButtonsDisabled(true);
+        // rc.closeProducer(RoomClient.mediaType.audio);
+        rc.updatePeerInfo(peer_name, rc.peer_id, 'audio', false);
+        rc.pauseProducer(RoomClient.mediaType.audio);
     };
     startVideoButton.onclick = () => {
         setVideoButtonsDisabled(true);
@@ -1051,7 +1186,7 @@ function handleButtons() {
         rc.closeProducer(RoomClient.mediaType.screen);
     };
     fileShareButton.onclick = () => {
-        rc.selectFileToShare(socket.id, true);
+        rc.selectFileToShare(rc.peer_id, true);
     };
     videoShareButton.onclick = () => {
         rc.shareVideo('all');
@@ -1212,7 +1347,10 @@ function setSelectsInit() {
         //
         console.log('04.4 ----> Get Local Storage Devices after', lS.getLocalStorageDevices());
     }
-    if (initVideoSelect.value) changeCamera(initVideoSelect.value);
+    if (initVideoSelect.value) {
+        console.log(2);
+        changeCamera(initVideoSelect.value);
+    }
 }
 
 async function changeCamera(deviceId) {
@@ -1244,6 +1382,9 @@ async function changeCamera(deviceId) {
                 '04.5 ----> Success attached init cam video stream',
                 initStream.getVideoTracks()[0].getSettings(),
             );
+            if(!isDefaultVideoOn){
+                initVideo.className = 'hidden';
+            }
         })
         .catch((err) => {
             console.error('[Error] changeCamera', err);
@@ -1357,8 +1498,7 @@ function handleSelects() {
     };
     whiteboardGhostButton.onclick = (e) => {
         wbIsBgTransparent = !wbIsBgTransparent;
-        //setWhiteboardBgColor(wbIsBgTransparent ? 'rgba(0, 0, 0, 0.100)' : wbBackgroundColorEl.value);
-        wbIsBgTransparent ? wbCanvasBackgroundColor('rgba(0, 0, 0, 0.100)') : setTheme(lsSettings.theme);
+        setWhiteboardBgColor(wbIsBgTransparent ? 'rgba(0, 0, 0, 0.100)' : wbBackgroundColorEl.value);
     };
 }
 
@@ -1421,7 +1561,6 @@ function handleRoomClientEvents() {
         hide(startRecButton);
         show(stopRecButton);
         show(pauseRecButton);
-        show(recordingTime);
         startRecordingTimer();
     });
     rc.on(RoomClient.EVENTS.pauseRec, () => {
@@ -1439,7 +1578,6 @@ function handleRoomClientEvents() {
         hide(stopRecButton);
         hide(pauseRecButton);
         hide(resumeRecButton);
-        hide(recordingTime);
         show(startRecButton);
         stopRecordingTimer();
     });
@@ -1548,11 +1686,34 @@ function handleRoomClientEvents() {
             console.log('Room Client save recording before to exit');
             rc.stopRecording();
         }
-        if (survey.enabled) {
-            leaveFeedback();
-        } else {
-            openURL('/newroom');
-        }
+        let qs = new URLSearchParams(window.location.search);
+        Swal.fire({
+            background: swalBackground,
+            position: 'center',
+            title: '<strong>Leaving Meeting?</strong>',
+            html: ``,
+            showDenyButton: false,
+            showCancelButton: true,
+            confirmButtonText: `Rejoin`,
+            cancelButtonText: `Leave`,
+            showClass: {
+                popup: 'animate__animated animate__fadeInUp',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
+        }).then((result) => {
+            if (result.isConfirmed) {
+                location.reload();
+            } else {
+                openURL('https://deepbluework.com/');
+            }
+        });
+        // if (surveyActive) {
+        //     leaveFeedback();
+        // } else {
+        //     openURL('https://deepbluework.com');
+        // }
     });
 }
 
@@ -1568,16 +1729,20 @@ function leaveFeedback() {
         background: swalBackground,
         imageUrl: image.feedback,
         title: 'Leave a feedback',
-        text: 'Do you want to rate your MiroTalk experience?',
+        text: 'Do you want to rate your Meetblue experience?',
         confirmButtonText: `Yes`,
         denyButtonText: `No`,
-        showClass: { popup: 'animate__animated animate__fadeInDown' },
-        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+        showClass: {
+            popup: 'animate__animated animate__fadeInDown',
+        },
+        hideClass: {
+            popup: 'animate__animated animate__fadeOutUp',
+        },
     }).then((result) => {
         if (result.isConfirmed) {
-            openURL(survey.url);
+            openURL(url.survey);
         } else {
-            openURL('/newroom');
+            openURL('https://deepbluework.com');
         }
     });
 }
@@ -1700,10 +1865,6 @@ function isImageURL(url) {
     return url.match(/\.(jpeg|jpg|gif|png|tiff|bmp)$/) != null;
 }
 
-function isMobile(userAgent) {
-    return !!/Android|webOS|iPhone|iPad|iPod|BB10|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(userAgent || '');
-}
-
 function isTablet(userAgent) {
     return /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/.test(
         userAgent,
@@ -1716,13 +1877,6 @@ function isIpad(userAgent) {
 
 function openURL(url, blank = false) {
     blank ? window.open(url, '_blank') : (window.location.href = url);
-}
-
-function bytesToSize(bytes) {
-    let sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    if (bytes == 0) return '0 Byte';
-    let i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
-    return Math.round(bytes / Math.pow(1024, i), 2) + ' ' + sizes[i];
 }
 
 function setCookie(name, value, expDays) {
@@ -1773,7 +1927,7 @@ function setupWhiteboard() {
 
 function setupWhiteboardCanvas() {
     wbCanvas = new fabric.Canvas('wbCanvas');
-    wbCanvas.freeDrawingBrush.color = '#FFFFFF';
+    wbCanvas.freeDrawingBrush.color = '#'+personal_color;
     wbCanvas.freeDrawingBrush.width = 3;
     whiteboardIsDrawingMode(true);
 }
@@ -1844,8 +1998,12 @@ function whiteboardAddObj(type) {
                 input: 'text',
                 showCancelButton: true,
                 confirmButtonText: 'OK',
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                showClass: {
+                    popup: 'animate__animated animate__fadeInDown',
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutUp',
+                },
             }).then((result) => {
                 if (result.isConfirmed) {
                     let wbCanvasImgURL = result.value;
@@ -1873,8 +2031,12 @@ function whiteboardAddObj(type) {
                 showDenyButton: true,
                 confirmButtonText: `OK`,
                 denyButtonText: `Cancel`,
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                showClass: {
+                    popup: 'animate__animated animate__fadeInDown',
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutUp',
+                },
             }).then((result) => {
                 if (result.isConfirmed) {
                     let wbCanvasImg = result.value;
@@ -2071,8 +2233,12 @@ function confirmClearBoard() {
         showDenyButton: true,
         confirmButtonText: `Yes`,
         denyButtonText: `No`,
-        showClass: { popup: 'animate__animated animate__fadeInDown' },
-        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+        showClass: {
+            popup: 'animate__animated animate__fadeInDown',
+        },
+        hideClass: {
+            popup: 'animate__animated animate__fadeOutUp',
+        },
     }).then((result) => {
         if (result.isConfirmed) {
             whiteboardAction(getWhiteboardAction('clear'));
@@ -2195,13 +2361,13 @@ async function getParticipantsTable(peers) {
     <tr>
         <td>&nbsp;<i class="fas fa-users fa-lg"></i></td>
         <td>all</td>
-        <td><button id="muteAllButton" onclick="rc.peerAction('me','${socket.id}','mute',true,true)">${_PEER.audioOff}</button></td>
-        <td><button id="hideAllButton" onclick="rc.peerAction('me','${socket.id}','hide',true,true)">${_PEER.videoOff}</button></td>
+        <td><button id="muteAllButton" onclick="rc.peerAction('me','${rc.peer_id}','mute',true,true)">${_PEER.audioOff}</button></td>
+        <td><button id="hideAllButton" onclick="rc.peerAction('me','${rc.peer_id}','hide',true,true)">${_PEER.videoOff}</button></td>
         <td></td>
-        <td><button id="sendAllButton" onclick="rc.selectFileToShare('${socket.id}', true)">${_PEER.sendFile}</button></td>
+        <td><button id="sendAllButton" onclick="rc.selectFileToShare('${rc.peer_id}', true)">${_PEER.sendFile}</button></td>
         <td><button id="sendMessageToAll" onclick="rc.sendMessageTo('all','all')">${_PEER.sendMsg}</button></td>
         <td><button id="sendVideoToAll" onclick="rc.shareVideo('all');">${_PEER.sendVideo}</button></td>
-        <td><button id="ejectAllButton" onclick="rc.peerAction('me','${socket.id}','eject',true,true)">${_PEER.ejectPeer}</button></td>
+        <td><button id="ejectAllButton" onclick="rc.peerAction('me','${rc.peer_id}','eject',true,true)">${_PEER.ejectPeer}</button></td>
     </tr>
     `;
     }
@@ -2216,8 +2382,8 @@ async function getParticipantsTable(peers) {
         let peer_sendFile = _PEER.sendFile;
         let peer_sendMsg = _PEER.sendMsg;
         let peer_id = peer_info.peer_id;
-        let avatarImg = getParticipantAvatar(peer_name);
-        if (socket.id === peer_id) {
+        let avatarImg = getParticipantAvatar(peer_name, peer_info.personal_color);
+        if (rc.peer_id === peer_id) {
             table += `
             <tr id='${peer_name}'>
                 <td><img src="${avatarImg}"></td>
@@ -2295,8 +2461,8 @@ function refreshParticipantsCount(count, adapt = true) {
     if (adapt) adaptAspectRatio(count);
 }
 
-function getParticipantAvatar(peerName) {
-    return rc.genAvatarSvg(peerName, 32);
+function getParticipantAvatar(peerName, personal_color) {
+    return rc.genAvatarSvg(peerName, 32, personal_color);
 }
 
 // ####################################################
@@ -2306,81 +2472,26 @@ function getParticipantAvatar(peerName) {
 function setTheme(theme) {
     switch (theme) {
         case 'dark':
-            swalBackground = 'radial-gradient(#393939, #000000)';
-            document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#393939, #000000)');
-            document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#393939, #000000)');
-            document.documentElement.style.setProperty('--left-msg-bg', '#252d31');
-            document.documentElement.style.setProperty('--right-msg-bg', '#056162');
-            document.documentElement.style.setProperty('--select-bg', '#2c2c2c');
-            document.documentElement.style.setProperty('--tab-btn-active', '#393939');
-            document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#393939, #000000)');
-            document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#393939, #000000)');
-            document.documentElement.style.setProperty('--btns-bg-color', 'rgba(0, 0, 0, 0.7)');
-            document.body.style.background = 'radial-gradient(#393939, #000000)';
-            selectTheme.selectedIndex = 0;
+            swalBackground = 'radial-gradient(#202641, #181D35)';
+            document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#202641, #181D35)');
+            document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#202641, #181D35)');
+            document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#202641, #181D35)');
+            document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#202641, #181D35)');
+            document.body.style.background = 'radial-gradient(#202641, #181D35)';
             break;
         case 'grey':
             swalBackground = 'radial-gradient(#666, #333)';
             document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#666, #333)');
             document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#666, #333)');
-            document.documentElement.style.setProperty('--left-msg-bg', '#252d31');
-            document.documentElement.style.setProperty('--right-msg-bg', '#056162');
-            document.documentElement.style.setProperty('--select-bg', '#2c2c2c');
-            document.documentElement.style.setProperty('--tab-btn-active', '#666');
             document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#666, #333)');
             document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#797979, #000)');
-            document.documentElement.style.setProperty('--btns-bg-color', 'rgba(0, 0, 0, 0.7)');
             document.body.style.background = 'radial-gradient(#666, #333)';
-            selectTheme.selectedIndex = 1;
-            break;
-        case 'green':
-            swalBackground = 'radial-gradient(#003934, #001E1A)';
-            document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#003934, #001E1A)');
-            document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#003934, #001E1A)');
-            document.documentElement.style.setProperty('--left-msg-bg', '#003934');
-            document.documentElement.style.setProperty('--right-msg-bg', '#001E1A');
-            document.documentElement.style.setProperty('--select-bg', '#001E1A');
-            document.documentElement.style.setProperty('--tab-btn-active', '#003934');
-            document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#003934, #001E1A)');
-            document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#003934, #001E1A)');
-            document.documentElement.style.setProperty('--btns-bg-color', 'radial-gradient(#003934, #001E1A)');
-            document.body.style.background = 'radial-gradient(#003934, #001E1A)';
-            selectTheme.selectedIndex = 2;
-            break;
-        case 'blue':
-            swalBackground = 'radial-gradient(#306bac, #141B41)';
-            document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#306bac, #141B41)');
-            document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#306bac, #141B41)');
-            document.documentElement.style.setProperty('--left-msg-bg', '#306bac');
-            document.documentElement.style.setProperty('--right-msg-bg', '#141B41');
-            document.documentElement.style.setProperty('--select-bg', '#141B41');
-            document.documentElement.style.setProperty('--tab-btn-active', '#306bac');
-            document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#306bac, #141B41)');
-            document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#306bac, #141B41)');
-            document.documentElement.style.setProperty('--btns-bg-color', 'radial-gradient(#141B41, #306bac)');
-            document.body.style.background = 'radial-gradient(#306bac, #141B41)';
-            selectTheme.selectedIndex = 3;
-            break;
-        case 'red':
-            swalBackground = 'radial-gradient(#69140E, #3C1518)';
-            document.documentElement.style.setProperty('--body-bg', 'radial-gradient(#69140E, #3C1518)');
-            document.documentElement.style.setProperty('--msger-bg', 'radial-gradient(#69140E, #3C1518)');
-            document.documentElement.style.setProperty('--left-msg-bg', '#69140E');
-            document.documentElement.style.setProperty('--right-msg-bg', '#3C1518');
-            document.documentElement.style.setProperty('--select-bg', '#3C1518');
-            document.documentElement.style.setProperty('--tab-btn-active', '#69140E');
-            document.documentElement.style.setProperty('--settings-bg', 'radial-gradient(#69140E, #3C1518)');
-            document.documentElement.style.setProperty('--wb-bg', 'radial-gradient(#69140E, #3C1518)');
-            document.documentElement.style.setProperty('--btns-bg-color', 'radial-gradient(#69140E, #3C1518)');
-            document.body.style.background = 'radial-gradient(#69140E, #3C1518)';
-            selectTheme.selectedIndex = 4;
             break;
         //...
     }
-    lsSettings.theme = theme;
-    lS.setObjectLocalStorage('MIROTALK_SFU_SETTINGS', lsSettings);
+    currentTheme = theme;
     wbIsBgTransparent = false;
-    if (rc) rc.isChatBgTransparent = false;
+    rc.isChatBgTransparent = false;
 }
 
 // ####################################################
@@ -2475,7 +2586,11 @@ function showAbout() {
             Author: <a id="linkedin-button" data-umami-event="Linkedin button" href="https://www.linkedin.com/in/miroslav-pejic-976a07101/" target="_blank"> Miroslav Pejic</a>
         </div>
         `,
-        showClass: { popup: 'animate__animated animate__fadeInDown' },
-        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+        showClass: {
+            popup: 'animate__animated animate__fadeInDown',
+        },
+        hideClass: {
+            popup: 'animate__animated animate__fadeOutUp',
+        },
     });
 }

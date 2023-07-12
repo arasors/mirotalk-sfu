@@ -1,18 +1,5 @@
 'use strict';
 
-/**
- * MiroTalk SFU - Client component
- *
- * @link    GitHub: https://github.com/miroslavpejic85/mirotalksfu
- * @link    Official Live demo: https://sfu.mirotalk.com
- * @license For open source use: AGPLv3
- * @license For commercial or closed source, contact us at license.mirotalk@gmail.com or purchase directly via CodeCanyon
- * @license CodeCanyon: https://codecanyon.net/item/mirotalk-sfu-webrtc-realtime-video-conferences/40769970
- * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.0.5
- *
- */
-
 const cfg = {
     useAvatarSvg: true,
 };
@@ -27,7 +14,6 @@ const html = {
     videoOff: 'fas fa-video-slash',
     userName: 'username',
     userHand: 'fas fa-hand-paper pulsate',
-    pip: 'fas fa-images',
     fullScreen: 'fas fa-expand',
     snapshot: 'fas fa-camera-retro',
     sendFile: 'fas fa-upload',
@@ -117,8 +103,10 @@ class RoomClient {
         socket,
         room_id,
         peer_name,
+        peer_pass_organizer,
         peer_uuid,
         peer_info,
+        isDefaultAudioOn,
         isAudioAllowed,
         isVideoAllowed,
         isScreenAllowed,
@@ -135,9 +123,11 @@ class RoomClient {
         this.room_id = room_id;
         this.peer_id = socket.id;
         this.peer_name = peer_name;
+        this.peer_pass_organizer = peer_pass_organizer;
         this.peer_uuid = peer_uuid;
         this.peer_info = peer_info;
 
+        this.isDefaultAudioOn = isDefaultAudioOn;
         this.isAudioAllowed = isAudioAllowed;
         this.isVideoAllowed = isVideoAllowed;
         this.isScreenAllowed = isScreenAllowed;
@@ -153,7 +143,6 @@ class RoomClient {
         this._isConnected = false;
         this.isVideoOnFullScreen = false;
         this.isVideoFullScreenSupported = peer_info.is_mobile_device && peer_info.os_name === 'iOS' ? false : true;
-        this.isVideoPictureInPictureSupported = !DetectRTC.isMobileDevice && document.pictureInPictureEnabled;
         this.isChatOpen = false;
         this.isChatEmojiOpen = false;
         this.showChatOnMessage = true;
@@ -175,7 +164,7 @@ class RoomClient {
         this.recScreenStream = null;
         this._isRecording = false;
 
-        this.RoomPassword = false;
+        this.RoomPassword = null;
 
         // File transfer settings
         this.fileToSend = null;
@@ -247,6 +236,7 @@ class RoomClient {
                 let data = {
                     room_id: this.room_id,
                     peer_info: this.peer_info,
+                    peer_pass_organizer: this.peer_pass_organizer,
                 };
                 await this.join(data);
                 this.initSockets();
@@ -313,15 +303,17 @@ class RoomClient {
     }
 
     async handleRoomInfo(room) {
-        console.log('07.0 ----> Room Survey', room.survey);
-        survey = room.survey;
         let peers = new Map(JSON.parse(room.peers));
+        
+        const thisPeerId= Array.from(peers.keys()).find((id) => id === this.peer_id);
+        const thisPeer =peers?.get(thisPeerId)?.peer_info;
+        isPresenter = !!thisPeer.is_organizer;
+        handleRules(isPresenter);
         participantsCount = peers.size;
         for (let peer of Array.from(peers.keys()).filter((id) => id == this.peer_id)) {
             let my_peer_info = peers.get(peer).peer_info;
             console.log('07.1 ----> My Peer info', my_peer_info);
-            isPresenter = window.localStorage.isReconnected === 'true' ? isPresenter : my_peer_info.peer_presenter;
-            window.localStorage.isReconnected = false;
+            isPresenter = my_peer_info.peer_presenter;
             handleRules(isPresenter);
         }
         adaptAspectRatio(participantsCount);
@@ -524,6 +516,11 @@ class RoomClient {
                 participantsCount = data.peer_counts;
                 adaptAspectRatio(participantsCount);
                 if (isParticipantsListOpen) getRoomParticipants(true);
+                if (participantsCount == 1) {
+                    isPresenter = true;
+                    handleRules(isPresenter);
+                    console.log('I am alone in the room, got Presenter Rules');
+                }
             }.bind(this),
         );
 
@@ -578,6 +575,12 @@ class RoomClient {
                 console.log('Room lobby:', data);
                 this.roomLobby(data);
             }.bind(this),
+        );
+
+        this.socket.on('accepted', function (data) {
+            console.log('Room Lobby Update:', data);
+            this.accepted(data);
+        }.bind(this),
         );
 
         this.socket.on(
@@ -657,52 +660,11 @@ class RoomClient {
         );
 
         this.socket.on(
-            'connect',
-            function () {
-                console.log('Connected to signaling server!');
-                this._isConnected = true;
-                // location.reload();
-                getPeerName() ? location.reload() : openURL(this.getReconnectDirectJoinURL());
-            }.bind(this),
-        );
-
-        this.socket.on(
             'disconnect',
             function () {
                 this.exit(true);
-                this.ServerAway();
             }.bind(this),
         );
-    }
-
-    // ####################################################
-    // SERVER AWAY/MAINTENANCE
-    // ####################################################
-
-    ServerAway() {
-        this.sound('alert');
-        window.localStorage.isReconnected = true;
-        Swal.fire({
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showDenyButton: true,
-            showConfirmButton: false,
-            background: swalBackground,
-            imageUrl: image.poster,
-            title: 'Server away',
-            text: 'The server seems away or in maintenance, please wait until it come back up.',
-            denyButtonText: `Leave room`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
-        }).then((result) => {
-            if (!result.isConfirmed) {
-                this.event(_EVENTS.exitRoom);
-            }
-        });
-    }
-
-    getReconnectDirectJoinURL() {
-        return `${window.location.origin}/join?room=${this.room_id}&password=${this.RoomPassword}&name=${this.peer_name}&audio=${this.peer_info.peer_audio}&video=${this.peer_info.peer_video}&screen=${this.peer_info.peer_screen}&notify=0&isPresenter=${isPresenter}`;
     }
 
     // ####################################################
@@ -721,8 +683,12 @@ class RoomClient {
             html: `The Username is already in use. <br/> Please try with another one`,
             showDenyButton: false,
             confirmButtonText: `OK`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) {
                 openURL((window.location.href = '/join/' + this.room_id));
@@ -742,6 +708,9 @@ class RoomClient {
         } else {
             setColor(startAudioButton, 'red');
             console.log('09 ----> Audio is off');
+
+            //initilize audio as well in order to remove delay
+            this.produce(mediaType.audio, microphoneSelect.value);
         }
         if (this.isVideoAllowed) {
             console.log('10 ----> Start video media');
@@ -931,8 +900,8 @@ class RoomClient {
 
             switch (type) {
                 case mediaType.audio:
-                    this.setIsAudio(this.peer_id, true);
-                    this.event(_EVENTS.startAudio);
+                    this.setIsAudio(this.peer_id, this.isDefaultAudioOn);
+                    this.event(this.isDefaultAudioOn ? _EVENTS.startAudio : _EVENTS.stopAudio);
                     break;
                 case mediaType.video:
                     this.setIsVideo(true);
@@ -975,6 +944,7 @@ class RoomClient {
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
+                sampleRate: 44100,
                 deviceId: deviceId,
             },
             video: false,
@@ -1302,7 +1272,7 @@ class RoomClient {
     }
 
     async handleProducer(id, type, stream) {
-        let elem, vb, vp, ts, d, p, i, au, pip, fs, pm, pb, pn;
+        let elem, vb, vp, ts, d, p, i, au, fs, pm, pb, pn;
         switch (type) {
             case mediaType.video:
             case mediaType.screen:
@@ -1325,9 +1295,6 @@ class RoomClient {
                 vb = document.createElement('div');
                 vb.setAttribute('id', this.peer_id + '__vb');
                 vb.className = 'videoMenuBar fadein';
-                pip = document.createElement('button');
-                pip.id = id + '__pictureInPicture';
-                pip.className = html.pip;
                 fs = document.createElement('button');
                 fs.id = id + '__fullScreen';
                 fs.className = html.fullScreen;
@@ -1361,9 +1328,6 @@ class RoomClient {
                 BUTTONS.producerVideo.muteAudioButton && vb.appendChild(au);
                 BUTTONS.producerVideo.videoPrivacyButton && !isScreen && vb.appendChild(vp);
                 BUTTONS.producerVideo.snapShotButton && vb.appendChild(ts);
-                BUTTONS.producerVideo.videoPictureInPicture &&
-                    this.isVideoPictureInPictureSupported &&
-                    vb.appendChild(pip);
                 BUTTONS.producerVideo.fullScreenButton && this.isVideoFullScreenSupported && vb.appendChild(fs);
                 if (!this.isMobileDevice) vb.appendChild(pn);
                 d.appendChild(elem);
@@ -1374,7 +1338,6 @@ class RoomClient {
                 this.videoMediaContainer.appendChild(d);
                 this.attachMediaStream(elem, stream, type, 'Producer');
                 this.myVideoEl = elem;
-                this.isVideoPictureInPictureSupported && this.handlePIP(elem.id, pip.id);
                 this.isVideoFullScreenSupported && this.handleFS(elem.id, fs.id);
                 this.handleDD(elem.id, this.peer_id, true);
                 this.handleTS(elem.id, ts.id);
@@ -1387,7 +1350,6 @@ class RoomClient {
                 handleAspectRatio();
                 if (!this.isMobileDevice) {
                     this.setTippy(pn.id, 'Toggle Pin', 'top-end');
-                    this.setTippy(pip.id, 'Toggle picture in picture', 'top-end');
                     this.setTippy(ts.id, 'Snapshot', 'top-end');
                     this.setTippy(vp.id, 'Toggle video privacy', 'top-end');
                     this.setTippy(au.id, 'Audio status', 'top-end');
@@ -1414,6 +1376,7 @@ class RoomClient {
     }
 
     pauseProducer(type) {
+        console.log('pause producer type',type);
         if (!this.producerLabel.has(type)) {
             return console.log('There is no producer for this type ' + type);
         }
@@ -1437,6 +1400,7 @@ class RoomClient {
     }
 
     resumeProducer(type) {
+        console.log('resume producer type', type)
         if (!this.producerLabel.has(type)) {
             return console.log('There is no producer for this type ' + type);
         }
@@ -1669,7 +1633,7 @@ class RoomClient {
     }
 
     handleConsumer(id, type, stream, peer_name, peer_info) {
-        let elem, vb, d, p, i, cm, au, pip, fs, ts, sf, sm, sv, ko, pb, pm, pv, pn;
+        let elem, vb, d, p, i, cm, au, fs, ts, sf, sm, sv, ko, pb, pm, pv, pn;
 
         console.log('PEER-INFO', peer_info);
 
@@ -1703,9 +1667,6 @@ class RoomClient {
                 pv.min = 0;
                 pv.max = 100;
                 pv.value = 100;
-                pip = document.createElement('button');
-                pip.id = id + '__pictureInPicture';
-                pip.className = html.pip;
                 fs = document.createElement('button');
                 fs.id = id + '__fullScreen';
                 fs.className = html.fullScreen;
@@ -1756,9 +1717,6 @@ class RoomClient {
                 BUTTONS.consumerVideo.sendFileButton && vb.appendChild(sf);
                 BUTTONS.consumerVideo.sendMessageButton && vb.appendChild(sm);
                 BUTTONS.consumerVideo.snapShotButton && vb.appendChild(ts);
-                BUTTONS.consumerVideo.videoPictureInPicture &&
-                    this.isVideoPictureInPictureSupported &&
-                    vb.appendChild(pip);
                 BUTTONS.consumerVideo.fullScreenButton && this.isVideoFullScreenSupported && vb.appendChild(fs);
                 if (!this.isMobileDevice) vb.appendChild(pn);
                 d.appendChild(elem);
@@ -1768,7 +1726,6 @@ class RoomClient {
                 d.appendChild(vb);
                 this.videoMediaContainer.appendChild(d);
                 this.attachMediaStream(elem, stream, type, 'Consumer');
-                this.isVideoPictureInPictureSupported && this.handlePIP(elem.id, pip.id);
                 this.isVideoFullScreenSupported && this.handleFS(elem.id, fs.id);
                 this.handleDD(elem.id, remotePeerId);
                 this.handleTS(elem.id, ts.id);
@@ -1790,7 +1747,6 @@ class RoomClient {
                 console.log('[addConsumer] Video-element-count', this.videoMediaContainer.childElementCount);
                 if (!this.isMobileDevice) {
                     this.setTippy(pn.id, 'Toggle Pin', 'top-end');
-                    this.setTippy(pip.id, 'Toggle picture in picture', 'top-end');
                     this.setTippy(ts.id, 'Snapshot', 'top-end');
                     this.setTippy(sf.id, 'Send file', 'top-end');
                     this.setTippy(sm.id, 'Send message', 'top-end');
@@ -1951,7 +1907,7 @@ class RoomClient {
         }
         this.handleDD(d.id, peer_id, !remotePeer);
         this.popupPeerInfo(p.id, peer_info);
-        this.setVideoAvatarImgName(i.id, peer_name);
+        this.setVideoAvatarImgName(i.id, peer_name, peer_info?.personal_color);
         this.getId(i.id).style.display = 'block';
         handleAspectRatio();
         if (isParticipantsListOpen) getRoomParticipants(true);
@@ -1993,8 +1949,12 @@ class RoomClient {
                 showDenyButton: true,
                 confirmButtonText: `Yes`,
                 denyButtonText: `No`,
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                showClass: {
+                    popup: 'animate__animated animate__fadeInDown',
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutUp',
+                },
             }).then((result) => {
                 if (result.isConfirmed) {
                     startScreenButton.click();
@@ -2030,16 +1990,16 @@ class RoomClient {
                 .finally(
                     function () {
                         clean();
-                        this.event(_EVENTS.exitRoom);
                     }.bind(this),
                 );
         } else {
             clean();
         }
+        this.event(_EVENTS.exitRoom);
     }
 
     exitRoom() {
-        //...
+        this.sound('eject');
         this.exit();
     }
 
@@ -2110,22 +2070,25 @@ class RoomClient {
         });
     }
 
-    setVideoAvatarImgName(elemId, peer_name) {
+    setVideoAvatarImgName(elemId, peer_name, personal_color) {
         let elem = this.getId(elemId);
         if (cfg.useAvatarSvg) {
-            elem.setAttribute('src', this.genAvatarSvg(peer_name, 250));
+            elem.setAttribute('src', this.genAvatarSvg(peer_name, 250, personal_color));
         } else {
             elem.setAttribute('src', image.avatar);
         }
     }
 
-    genAvatarSvg(peerName, avatarImgSize) {
+    genAvatarSvg(peerName, avatarImgSize, personal_color) {
         const charCodeRed = peerName.charCodeAt(0);
         const charCodeGreen = peerName.charCodeAt(1) || charCodeRed;
         const red = Math.pow(charCodeRed, 7) % 200;
         const green = Math.pow(charCodeGreen, 7) % 200;
         const blue = (red + green) % 200;
-        const bgColor = `rgb(${red}, ${green}, ${blue})`;
+        let rgbColor = `rgb(${parseInt(personal_color.slice(0, 2), 16)}, ${parseInt(personal_color.slice(2, 4), 16)}, ${parseInt(personal_color.slice(4, 6), 16)})`;
+
+        // const bgColor = `rgb(${red}, ${green}, ${blue})`;
+        const bgColor = rgbColor;
         const textColor = '#ffffff';
         const svg = `
         <svg xmlns="http://www.w3.org/2000/svg" 
@@ -2301,8 +2264,12 @@ class RoomClient {
                     icon: type,
                     title: type,
                     text: message,
-                    showClass: { popup: 'animate__animated animate__fadeInDown' },
-                    hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown',
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp',
+                    },
                 });
                 break;
             case 'toast':
@@ -2382,26 +2349,6 @@ class RoomClient {
                 document.documentElement.style.setProperty('--btns-width', '320px');
                 document.documentElement.style.setProperty('--btns-flex-direction', 'row');
                 break;
-        }
-    }
-
-    // ####################################################
-    // PICTURE IN PICTURE
-    // ####################################################
-
-    handlePIP(elemId, pipId) {
-        let videoPlayer = this.getId(elemId);
-        let btnPIP = this.getId(pipId);
-        if (btnPIP) {
-            btnPIP.addEventListener('click', () => {
-                if (videoPlayer.pictureInPictureElement) {
-                    videoPlayer.exitPictureInPicture();
-                } else if (document.pictureInPictureEnabled) {
-                    videoPlayer.requestPictureInPicture().catch((error) => {
-                        console.error('Failed to enter Picture-in-Picture mode:', error);
-                    });
-                }
-            });
         }
     }
 
@@ -2828,14 +2775,15 @@ class RoomClient {
         } else {
             let data = {
                 peer_name: this.peer_name,
-                peer_id: this.peer_id,
+                peer_id: this.peer_id,            
+                personal_color: this.peer_info?.personal_color,
                 to_peer_id: 'all',
                 peer_msg: peer_msg,
             };
             console.log('Send message:', data);
             this.socket.emit('message', data);
         }
-        this.setMsgAvatar('right', this.peer_name);
+        this.setMsgAvatar('right', this.peer_name, this.peer_info.personal_color);
         this.appendMessage('right', this.rightMsgAvatar, this.peer_name, this.peer_id, peer_msg, 'all', 'all');
         this.cleanMessage();
     }
@@ -2854,8 +2802,12 @@ class RoomClient {
             inputPlaceholder: '💬 Enter your message...',
             showCancelButton: true,
             confirmButtonText: `Send`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.value) {
                 result.value = filterXSS(result.value.trim());
@@ -2868,13 +2820,14 @@ class RoomClient {
                 let data = {
                     peer_name: this.peer_name,
                     peer_id: this.peer_id,
+                    personal_color: this.peer_info?.personal_color,
                     to_peer_id: to_peer_id,
                     to_peer_name: toPeerName,
                     peer_msg: peer_msg,
                 };
                 console.log('Send message:', data);
                 this.socket.emit('message', data);
-                this.setMsgAvatar('right', this.peer_name);
+                this.setMsgAvatar('right', this.peer_name, this.peer_info.personal_color);
                 this.appendMessage(
                     'right',
                     this.rightMsgAvatar,
@@ -2891,7 +2844,7 @@ class RoomClient {
 
     showMessage(data) {
         if (!this.isChatOpen && this.showChatOnMessage) this.toggleChat();
-        this.setMsgAvatar('left', data.peer_name);
+        this.setMsgAvatar('left', data.peer_name, data?.personal_color);
         this.appendMessage(
             'left',
             this.leftMsgAvatar,
@@ -2907,8 +2860,8 @@ class RoomClient {
         this.sound('message');
     }
 
-    setMsgAvatar(avatar, peerName) {
-        let avatarImg = this.genAvatarSvg(peerName, 32);
+    setMsgAvatar(avatar, peerName, personal_color) {
+        let avatarImg = this.genAvatarSvg(peerName, 32, personal_color);
         avatar === 'left' ? (this.leftMsgAvatar = avatarImg) : (this.rightMsgAvatar = avatarImg);
     }
 
@@ -2979,8 +2932,12 @@ class RoomClient {
             showDenyButton: true,
             confirmButtonText: `Yes`,
             denyButtonText: `No`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) {
                 this.getId(id).remove();
@@ -3137,7 +3094,7 @@ class RoomClient {
         if (this.isChatBgTransparent) {
             document.documentElement.style.setProperty('--msger-bg', 'rgba(0, 0, 0, 0.100)');
         } else {
-            setTheme(lsSettings.theme);
+            setTheme(currentTheme);
         }
     }
 
@@ -3153,8 +3110,12 @@ class RoomClient {
             showDenyButton: true,
             confirmButtonText: `Yes`,
             denyButtonText: `No`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) {
                 let msgs = chatMsger.firstChild;
@@ -3273,29 +3234,6 @@ class RoomClient {
             const type = recordedBlobs[0].type.includes('mp4') ? 'mp4' : 'webm';
             const blob = new Blob(recordedBlobs, { type: 'video/' + type });
             const recFileName = `${dateTime}-REC.${type}`;
-            const currentDevice = DetectRTC.isMobileDevice ? 'MOBILE' : 'PC';
-            const blobFileSize = bytesToSize(blob.size);
-            const recTime = document.getElementById('recordingStatus');
-
-            Swal.fire({
-                background: swalBackground,
-                position: 'center',
-                icon: 'success',
-                title: 'Recording',
-                html: `
-                <div style="text-align: left;">
-                    🔴 Recording Info: <br/><br/>
-                    <ul>
-                        <li>Time: ${recTime.innerText}</li>
-                        <li>File: ${recFileName}</li>
-                        <li>Size: ${blobFileSize}</li>
-                    </ul>
-                    <br/>
-                    Please wait to be processed, then will be downloaded to your ${currentDevice} device.
-                </div>`,
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
-            });
 
             console.log('MediaRecorder Download Blobs');
             const url = window.URL.createObjectURL(blob);
@@ -3310,8 +3248,6 @@ class RoomClient {
                 window.URL.revokeObjectURL(url);
             }, 100);
             console.log(`🔴 Recording FILE: ${recFileName} done 👍`);
-
-            recTime.innerText = '0s';
         } catch (ex) {
             console.warn('Recording save failed', ex);
         }
@@ -3338,6 +3274,7 @@ class RoomClient {
             });
         }
         if (this.isMobileDevice) this.getId('swapCameraButton').className = '';
+        this.getId('recordingStatus').innerText = '0s';
         this.event(_EVENTS.stopRec);
         this.sound('recStop');
     }
@@ -3407,8 +3344,12 @@ class RoomClient {
             showDenyButton: true,
             confirmButtonText: `Send`,
             denyButtonText: `Cancel`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) {
                 this.sendFileInformations(result.value, peer_id, broadcast);
@@ -3626,8 +3567,12 @@ class RoomClient {
                     showDenyButton: true,
                     confirmButtonText: `Save`,
                     denyButtonText: `Cancel`,
-                    showClass: { popup: 'animate__animated animate__fadeInDown' },
-                    hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown',
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp',
+                    },
                 }).then((result) => {
                     if (result.isConfirmed) this.saveBlobToFile(blob, file);
                 });
@@ -3645,8 +3590,12 @@ class RoomClient {
                 showDenyButton: true,
                 confirmButtonText: `Save`,
                 denyButtonText: `Cancel`,
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                showClass: {
+                    popup: 'animate__animated animate__fadeInDown',
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutUp',
+                },
             }).then((result) => {
                 if (result.isConfirmed) this.saveBlobToFile(blob, file);
             });
@@ -3710,8 +3659,12 @@ class RoomClient {
             input: 'text',
             showCancelButton: true,
             confirmButtonText: `Share`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.value) {
                 result.value = filterXSS(result.value);
@@ -3745,6 +3698,7 @@ class RoomClient {
             }
         });
     }
+    isPresenter
 
     getVideoType(url) {
         if (url.endsWith('.mp4')) return 'video/mp4';
@@ -3917,8 +3871,12 @@ class RoomClient {
                             inputPlaceholder: 'Set Room password',
                             confirmButtonText: `OK`,
                             denyButtonText: `Cancel`,
-                            showClass: { popup: 'animate__animated animate__fadeInDown' },
-                            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                            showClass: {
+                                popup: 'animate__animated animate__fadeInDown',
+                            },
+                            hideClass: {
+                                popup: 'animate__animated animate__fadeOutUp',
+                            },
                             inputValidator: (pwd) => {
                                 if (!pwd) return 'Please enter the Room password';
                                 this.RoomPassword = pwd;
@@ -3948,6 +3906,21 @@ class RoomClient {
         } else {
             this.roomStatus(action);
         }
+    }
+    
+    accepted(data){
+        console.log({Data: data});
+        if(data.peers_id?.length > 0){
+            this.lobbyRemoveAll();
+            return;
+        }
+        console.log('Data received from server: ', data);
+        const trElem = this.getId(data.peer_id);
+        trElem?.parentNode?.removeChild(trElem);
+        lobbyParticipantsCount--;
+        
+        lobbyHeaderTitle.innerText = 'Lobby users (' + lobbyParticipantsCount + ')';
+        if (lobbyParticipantsCount == 0) this.lobbyToggle();
     }
 
     roomStatus(action) {
@@ -4006,14 +3979,13 @@ class RoomClient {
     // ####################################################
 
     roomLobby(data) {
-        console.log('LOBBY--->', data);
         switch (data.lobby_status) {
             case 'waiting':
                 if (!isRulesActive || isPresenter) {
                     let lobbyTr = '';
                     let peer_id = data.peer_id;
                     let peer_name = data.peer_name;
-                    let avatarImg = this.genAvatarSvg(peer_name, 32);
+                    let avatarImg = this.genAvatarSvg(peer_name, 32, data?.personal_color);
                     let lobbyTb = this.getId('lobbyTb');
                     let lobbyAccept = _PEER.acceptPeer;
                     let lobbyReject = _PEER.ejectPeer;
@@ -4024,8 +3996,8 @@ class RoomClient {
                     <tr id='${peer_id}'>
                         <td><img src="${avatarImg}" /></td>
                         <td>${peer_name}</td>
-                        <td><button id='${lobbyAcceptId}' onclick="rc.lobbyAction(this.id, 'accept')">${lobbyAccept}</button></td>
-                        <td><button id='${lobbyRejectId}' onclick="rc.lobbyAction(this.id, 'reject')">${lobbyReject}</button></td>
+                        <td><button id=${lobbyAcceptId} onclick="rc.lobbyAction(this.id, 'accept')">${lobbyAccept}</button></td>
+                        <td><button id=${lobbyRejectId} onclick="rc.lobbyAction(this.id, 'reject')">${lobbyReject}</button></td>
                     </tr>
                     `;
 
@@ -4057,8 +4029,12 @@ class RoomClient {
                     title: 'Rejected',
                     text: 'Your join meeting was be rejected by moderator',
                     confirmButtonText: `Ok`,
-                    showClass: { popup: 'animate__animated animate__fadeInDown' },
-                    hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown',
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp',
+                    },
                 }).then((result) => {
                     if (result.isConfirmed) {
                         this.exit();
@@ -4080,17 +4056,22 @@ class RoomClient {
             broadcast: false,
         };
         this.socket.emit('roomLobby', data);
-        const trElem = this.getId(peer_id);
-        trElem.parentNode.removeChild(trElem);
-        lobbyParticipantsCount--;
-        lobbyHeaderTitle.innerText = 'Lobby users (' + lobbyParticipantsCount + ')';
-        if (lobbyParticipantsCount == 0) this.lobbyToggle();
+
+        //REMOVE PEER FROM ALL THE ORGANIZER
+        this.socket.emit('accepted', data);
+
+        // const trElem = this.getId(peer_id);
+        // trElem.parentNode.removeChild(trElem);
+        // lobbyParticipantsCount--;
+        // lobbyHeaderTitle.innerText = 'Lobby users (' + lobbyParticipantsCount + ')';
+        // if (lobbyParticipantsCount == 0) this.lobbyToggle();
     }
 
     lobbyAcceptAll() {
         if (lobbyParticipantsCount > 0) {
             const data = this.lobbyGetData('accept', this.lobbyGetPeerIds());
             this.socket.emit('roomLobby', data);
+            this.socket.emit('accepted', data);
             this.lobbyRemoveAll();
         } else {
             this.userLog('info', 'No participants in lobby detected', 'top-end');
@@ -4101,6 +4082,7 @@ class RoomClient {
         if (lobbyParticipantsCount > 0) {
             const data = this.lobbyGetData('reject', this.lobbyGetPeerIds());
             this.socket.emit('roomLobby', data);
+            this.socket.emit('accepted', data);
             this.lobbyRemoveAll();
         } else {
             this.userLog('info', 'No participants in lobby detected', 'top-end');
@@ -4198,8 +4180,12 @@ class RoomClient {
                 input: 'text',
                 inputPlaceholder: 'Enter the Room password',
                 confirmButtonText: `OK`,
-                showClass: { popup: 'animate__animated animate__fadeInDown' },
-                hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                showClass: {
+                    popup: 'animate__animated animate__fadeInDown',
+                },
+                hideClass: {
+                    popup: 'animate__animated animate__fadeOutUp',
+                },
                 inputValidator: (pwd) => {
                     if (!pwd) return 'Please enter the Room password';
                     this.RoomPassword = pwd;
@@ -4227,8 +4213,12 @@ class RoomClient {
             text: 'The room is locked, try with another one.',
             showDenyButton: false,
             confirmButtonText: `Ok`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) this.exit();
         });
@@ -4243,12 +4233,16 @@ class RoomClient {
             showConfirmButton: false,
             background: swalBackground,
             imageUrl: image.poster,
-            title: 'Room has lobby enabled',
-            text: 'Asking to join meeting...',
+            title: 'Requesting to join the meeting',
+            text: 'Please wait...',
             confirmButtonText: `Ok`,
             denyButtonText: `Leave room`,
-            showClass: { popup: 'animate__animated animate__fadeInDown' },
-            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown',
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp',
+            },
         }).then((result) => {
             if (result.isConfirmed) {
                 control.style.display = 'none';
@@ -4409,7 +4403,8 @@ class RoomClient {
                     break;
                 case 'mute':
                     if (peer_id === this.peer_id || broadcast) {
-                        this.closeProducer(mediaType.audio);
+                        // this.closeProducer(mediaType.audio);
+                        this.pauseProducer(mediaType.audio);
                         this.updatePeerInfo(this.peer_name, this.peer_id, 'audio', false);
                         this.userLog(
                             'warning',
@@ -4472,8 +4467,12 @@ class RoomClient {
                     showDenyButton: true,
                     confirmButtonText: `Yes`,
                     denyButtonText: `No`,
-                    showClass: { popup: 'animate__animated animate__fadeInDown' },
-                    hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown',
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp',
+                    },
                 })
                     .then((result) => {
                         if (result.isConfirmed) {
@@ -4515,8 +4514,12 @@ class RoomClient {
                     showDenyButton: true,
                     confirmButtonText: `Yes`,
                     denyButtonText: `No`,
-                    showClass: { popup: 'animate__animated animate__fadeInDown' },
-                    hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown',
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp',
+                    },
                 })
                     .then((result) => {
                         if (result.isConfirmed) {

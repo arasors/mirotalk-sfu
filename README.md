@@ -18,12 +18,6 @@
 
 <hr />
 
-<p align="center">
-    For questions, discussions, help & support, join with us on <a href="https://discord.gg/rgGYfeYW3N">discord</a>
-</p>
-
-<hr />
-
 <details>
 <summary>Features</summary>
 
@@ -124,9 +118,9 @@ $ apt install -y software-properties-common
 $ add-apt-repository ppa:deadsnakes/ppa
 $ apt update
 $ apt install -y python3.8 python3-pip
-# NodeJS 18.X and npm
+# NodeJS 16.X and npm
 $ apt install -y curl dirmngr apt-transport-https lsb-release ca-certificates
-$ curl -sL https://deb.nodesource.com/setup_18.x | bash -
+$ curl -sL https://deb.nodesource.com/setup_16.x | bash -
 $ apt-get install -y nodejs
 $ npm install -g npm@latest
 ```
@@ -288,6 +282,15 @@ https://sfu.mirotalk.com
 
 -   Contributions are welcome and greatly appreciated!
 -   Just run before `npm run lint`
+
+</details>
+
+<details>
+<summary>Questions, Discussions and support</summary>
+
+<br/>
+
+-   For questions, discussions, help & support, join with us on [Discord](https://discord.gg/rgGYfeYW3N)
 
 </details>
 

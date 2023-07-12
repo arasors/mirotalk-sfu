@@ -1,11 +1,11 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
     <head>
         <!-- Title and Icon -->
 
-        <title>MiroTalk SFU - Room Video Calls, Messaging and Screen Sharing.</title>
-        <link rel="shortcut icon" href="../images/logo.svg" />
-        <link rel="apple-touch-icon" href="../images/logo.svg" />
+        <title>Meetblue - Room Video Calls, Messaging and Screen Sharing.</title>
+        <link rel="shortcut icon" href="../images/favicon.ico" />
+        <link rel="apple-touch-icon" href="../images/favicon.svg" />
 
         <!-- Meta Information -->
 
@@ -13,7 +13,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
             name="description"
-            content="MiroTalk SFU powered by WebRTC and mediasoup, Real-time Simple Secure Fast video calls, messaging and screen sharing capabilities in the browser."
+            content="Metblue Real-time Simple Secure Fast video calls, messaging and screen sharing capabilities in the browser."
         />
         <meta
             name="keywords"
@@ -22,14 +22,14 @@
 
         <!-- https://ogp.me -->
 
-        <meta property="og:type" content="app-webrtc" />
-        <meta property="og:site_name" content="MiroTalk SFU" />
+        <meta property="og:type" content="Video-Calling" />
+        <meta property="og:site_name" content="Meetblue" />
         <meta property="og:title" content="Click the link to make a call." />
         <meta
             property="og:description"
-            content="MiroTalk SFU calling provides real-time video calls, messaging and screen sharing."
+            content="Meetblue calling provides real-time video calls, messaging and screen sharing."
         />
-        <meta property="og:image" content="https://sfu.mirotalk.com/images/mirotalksfu.png" />
+        <meta property="og:image" content="../images/meetblueog.svg" />
 
         <!-- StyleSheet -->
 
@@ -87,7 +87,7 @@
 
         <div id="loadingDiv" class="center pulsate">
             <h1>Loading</h1>
-            <img src="../images/loader.gif" style="width: 400px" />
+            <img src="../images/loader.gif" />
             <pre>
 Please allow the camera or microphone
 access to use this app.
@@ -105,8 +105,8 @@ access to use this app.
                     poster="../images/loader.gif"
                     style="object-fit: var(--videoObjFit)"
                 ></video>
-                <button id="initVideoButton" class="fas fa-video" onclick="handleVideo(event)"></button>
                 <button id="initAudioButton" class="fas fa-microphone" onclick="handleAudio(event)"></button>
+                <button id="initVideoButton" class="fas fa-video-slash" style="color: red" onclick="handleVideo(event)"></button>
                 <button id="initAudioVideoButton" class="fas fa-eye" onclick="handleAudioVideo(event)"></button>
                 <button id="initStartScreenButton" class="hidden" onclick="toggleScreenSharing()">
                     <i class="fas fa-desktop"></i>
@@ -123,13 +123,13 @@ access to use this app.
         <div id="control" class="fadein">
             <button id="shareButton" class="hidden"><i class="fas fa-share-alt"></i></button>
             <button id="hideMeButton" class="hidden"><i id="hideMeIcon" class="fas fa-user"></i></button>
-            <button id="startVideoButton" class="hidden"><i class="fas fa-video-slash"></i></button>
-            <button id="stopVideoButton" class="hidden"><i class="fas fa-video"></i></button>
-            <button id="swapCameraButton" class="hidden"><i class="fas fa-camera-rotate"></i></button>
             <button id="startAudioButton" class="hidden"><i class="fas fa-microphone-slash"></i></button>
             <button id="stopAudioButton" class="hidden"><i class="fas fa-microphone"></i></button>
+            <button id="startVideoButton" class="hidden"><i class="fas fa-video-slash"></i></button>
+            <button id="stopVideoButton" class="hidden"><i class="fas fa-video"></i></button>
             <button id="startScreenButton" class="hidden"><i class="fas fa-desktop"></i></button>
             <button id="stopScreenButton" class="hidden"><i class="fas fa-stop-circle"></i></button>
+            <button id="swapCameraButton" class="hidden"><i class="fas fa-camera-rotate"></i></button>
             <button id="chatButton" class="hidden"><i class="fas fa-comments"></i></button>
             <button id="participantsButton" class="hidden"><i class="fas fa-users"></i></button>
             <button id="whiteboardButton" class="hidden"><i class="fas fa-chalkboard-teacher"></i></button>
@@ -184,6 +184,7 @@ access to use this app.
                 </div>
 
                 <div id="tabRoom" class="tabcontent">
+                    <br />
                     <button id="fullScreenButton" class="hidden">
                         <i class="fas fa-expand-alt"></i>
                         <p>Full screen mode</p>
@@ -249,6 +250,7 @@ access to use this app.
                 </div>
 
                 <div id="tabRecording" class="tabcontent">
+                    <br />
                     <button id="startRecButton" class="hidden">
                         <i class="fas fa-record-vinyl"></i>
                         <p>Start recording</p>
@@ -266,20 +268,17 @@ access to use this app.
                         <i class="far fa-play-circle"></i>
                         <p>Resume recording</p>
                     </button>
-                    <div id="recordingTime" class="hidden">
-                        <hr style="border: 1px solid grey" />
-                        <table class="settingsTable">
-                            <tr>
-                                <td>
-                                    <i style="color: red" class="fa-solid fa-circle pulsate"></i>&nbsp;&nbsp;REC time:
-                                </td>
-                                <td id="recordingStatus">0s</td>
-                            </tr>
-                        </table>
-                    </div>
+                    <hr style="border: 1px solid grey" />
+                    <table class="settingsTable">
+                        <tr>
+                            <td><i style="color: red" class="fa-solid fa-circle"></i>&nbsp;&nbsp;REC time:</td>
+                            <td id="recordingStatus">0s</td>
+                        </tr>
+                    </table>
                 </div>
 
                 <div id="tabVideoShare" class="tabcontent">
+                    <br />
                     <button id="videoShareButton">
                         <i class="fab fa-youtube"></i>
                         <p>Share a Video or Audio</p>
@@ -330,9 +329,6 @@ access to use this app.
                     <select id="selectTheme" class="form-select text-light bg-dark">
                         <option value="dark">⚫ &nbsp;Dark</option>
                         <option value="grey">⚪ &nbsp;Grey</option>
-                        <option value="green">🟢 &nbsp;Green</option>
-                        <option value="blue">🔵 &nbsp;Blue</option>
-                        <option value="red">🔴 &nbsp;Red</option>
                     </select>
                     <br />
                     <p>Buttons bar:</p>
@@ -351,7 +347,6 @@ access to use this app.
                             <option value="top">Top</option>
                         </select>
                     </div>
-                    <br />
                 </div>
 
                 <div id="tabLanguages" class="tabcontent">
